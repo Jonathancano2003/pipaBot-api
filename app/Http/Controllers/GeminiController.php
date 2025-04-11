@@ -6,16 +6,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Prompt;
 
 class GeminiController extends Controller
 {
-    private $geminiApiKey;
     private $cacheKey = 'chat_history';
-
-    public function __construct()
-    {
-        $this->geminiApiKey = env('GEMINI_API_KEY');
-    }
 
     public function receiveMessage(Request $request)
     {
@@ -31,18 +26,15 @@ class GeminiController extends Controller
             return response()->json(['error' => 'Imagen en base64 inválida'], 400);
         }
 
-        // Prompt por defecto
-        $defaultPrompt = "Actúa como un técnico de sonido profesional pero que trabaja por amor al arte y el amor a la música. [...]";
-        $systemPrompt = $defaultPrompt;
+        // Obtener el último prompt de la base de datos
+        $lastPrompt = Prompt::latest()->first();
+        $systemPrompt = $lastPrompt?->content;
 
-        // Si existe prompt.txt y tiene contenido, usarlo
-        if (Storage::disk('local')->exists('prompt.txt')) {
-            $contenido = trim(Storage::disk('local')->get('prompt.txt'));
-            if (!empty($contenido)) {
-                $systemPrompt = $contenido;
-            }
+        if (!$systemPrompt) {
+            return response()->json(['error' => 'No se encontró un prompt disponible'], 400);
         }
 
+        // Cargar historial del chat
         $chatHistory = Cache::get($this->cacheKey, []);
 
         if (empty($chatHistory)) {
@@ -94,28 +86,61 @@ class GeminiController extends Controller
 
     public function updatePrompt(Request $request)
     {
-        $newPrompt = $request->input('prompt');
-
+        $newPrompt = trim($request->input('prompt'));
+    
         if (!$newPrompt) {
             return response()->json(['error' => 'Prompt requerido'], 400);
         }
-
+    
+        // ✅ Verificar duplicado exacto
+        if (Prompt::where('content', $newPrompt)->exists()) {
+            return response()->json(['error' => 'Este prompt ya existe.'], 409); // 409 Conflict
+        }
+    
+        Prompt::create([
+            'content' => $newPrompt,
+            'is_default' => false,
+        ]);
+    
         Storage::disk('local')->put('prompt.txt', $newPrompt);
-
-        return response()->json(['status' => 'Prompt guardado en archivo']);
+    
+        return response()->json(['status' => 'Prompt guardado en base de datos y archivo']);
     }
+    
+
+
+
+
+    public function getPrompt()
+    {
+        $latest = Prompt::latest()->first();
+
+        if ($latest) {
+            return response()->json(['prompt' => $latest->content]);
+        }
+
+        return response()->json(['prompt' => '']);
+    }
+
+    public function resetPrompt()
+    {
+        Cache::forget('chat_history');
+        Prompt::truncate();
+
+        return response()->json(['status' => 'Historial y prompts eliminados']);
+    }
+
+    public function getPromptHistory()
+    {
+        $prompts = Prompt::latest()->get(['id', 'content', 'created_at']); // 👈 AÑADE 'id'
+        return response()->json($prompts);
+    }
+    
 
     public function resetChat()
     {
-        // Borrar historial del chat
         Cache::forget($this->cacheKey);
-
-        // Eliminar el archivo de prompt si existe
-        if (Storage::disk('local')->exists('prompt.txt')) {
-            Storage::disk('local')->delete('prompt.txt');
-        }
-
-        return response()->json(['status' => 'Historial y prompt reiniciados']);
+        return response()->json(['status' => 'Historial de chat reiniciado']);
     }
 
     private function sendMessageInternal($chatHistory)
@@ -134,7 +159,7 @@ class GeminiController extends Controller
         $curl = curl_init();
 
         curl_setopt_array($curl, [
-            CURLOPT_URL => "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" . $this->geminiApiKey,
+            CURLOPT_URL => "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" . env('GEMINI_API_KEY'),
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_ENCODING => "",
             CURLOPT_MAXREDIRS => 10,
@@ -165,5 +190,17 @@ class GeminiController extends Controller
         } else {
             return 'Error al interpretar la respuesta de Gemini';
         }
+    }
+    public function deletePrompt($id)
+    {
+        $prompt = Prompt::find($id);
+
+        if (!$prompt) {
+            return response()->json(['error' => 'Prompt no encontrado'], 404);
+        }
+
+        $prompt->delete();
+
+        return response()->json(['status' => 'Prompt eliminado']);
     }
 }
