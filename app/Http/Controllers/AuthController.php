@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\User;
 
+use Illuminate\Support\Facades\Hash;
+
 class AuthController extends Controller
 {
     public function login(Request $request)
@@ -18,7 +20,7 @@ class AuthController extends Controller
             return response()->json(['success' => false, 'error' => 'Usuario no encontrado']);
         }
 
-        if ($usuario->password === $password) {
+        if (Hash::check($password, $usuario->password)) {
             return response()->json(['success' => true]);
         }
 
