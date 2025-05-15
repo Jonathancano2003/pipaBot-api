@@ -203,4 +203,39 @@ class GeminiController extends Controller
 
         return response()->json(['status' => 'Prompt eliminado']);
     }
+    public function setContext(Request $request)
+{
+    $mensajes = $request->input('mensajes');
+
+    if (!is_array($mensajes)) {
+        return response()->json(['error' => 'Formato inválido'], 400);
+    }
+
+    $chatHistory = [];
+
+    foreach ($mensajes as $msg) {
+        $entry = [
+            'role' => $msg['sender'] === 'user' ? 'user' : 'model',
+            'parts' => []
+        ];
+
+        if ($msg['type'] === 'text') {
+            $entry['parts'][] = ['text' => $msg['content']];
+        } elseif ($msg['type'] === 'image') {
+            $entry['parts'][] = [
+                'inline_data' => [
+                    'mime_type' => 'image/jpeg',
+                    'data' => explode(',', $msg['content'])[1] ?? ''
+                ]
+            ];
+        }
+
+        $chatHistory[] = $entry;
+    }
+
+    Cache::put('chat_history', $chatHistory, now()->addMinutes(60));
+
+    return response()->json(['status' => 'Contexto actualizado']);
+}
+
 }

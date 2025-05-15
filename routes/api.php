@@ -6,6 +6,7 @@ use App\Http\Controllers\GeminiController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ChatHistoryController;
 use App\Http\Controllers\RegisterController;
+use App\Http\Controllers\QuickReplyController;
 
 
 Route::post('/register', [RegisterController::class, 'register']);
@@ -23,9 +24,13 @@ Route::post('/gemini/reset', [GeminiController::class, 'resetChat']);
 Route::post('/gemini/update-prompt', [GeminiController::class, 'updatePrompt']);
 Route::post('/login', [AuthController::class, 'login']);
 
+Route::post('/gemini/context', [GeminiController::class, 'setContext']);
 
 Route::get('/prompt', [GeminiController::class, 'getPrompt']);
 Route::post('/prompt', [GeminiController::class, 'updatePrompt']);
 Route::get('/prompt/reset', [GeminiController::class, 'resetPrompt']);
 Route::get('/prompt/history', [GeminiController::class, 'getPromptHistory']);
 Route::delete('/prompt/{id}', [GeminiController::class, 'deletePrompt']);
+Route::get('/quick-replies', [QuickReplyController::class, 'index']);
+Route::post('/quick-replies', [QuickReplyController::class, 'store']);
+Route::delete('/quick-replies/{id}', [QuickReplyController::class, 'destroy']);
